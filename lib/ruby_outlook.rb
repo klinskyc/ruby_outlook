@@ -367,7 +367,7 @@ module RubyOutlook
     #              If nil, the default calendar is used
     # fields (array): An array of field names to include in results
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
-    def get_calendar_view(token, window_start, window_end, view_size = nil, page = nil, id = nil, fields = nil, user = nil, )
+    def get_calendar_view(token, window_start, window_end, view_size = nil, page = nil, id = nil, fields = nil, user = nil)
       request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user))
 
       unless id.nil?
