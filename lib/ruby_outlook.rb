@@ -323,6 +323,18 @@ module RubyOutlook
     # fields (array): An array of field names to include in results
     # sort (hash): { sort_on => field_to_sort_on, sort_order => 'ASC' | 'DESC' }
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
+    
+    def create_calendar(token,name)
+      request_url = "/api/v2.0/me/calendars"
+      request_params = {
+        'Name' => (page - 1) * view_size
+      }
+
+      get_events_response = make_api_call "POST", request_url, token, request_params
+      JSON.parse(get_events_response)
+
+    end
+
     def get_events(token, view_size, page, fields = nil, sort = nil, user = nil)
       request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Events"
       request_params = {
