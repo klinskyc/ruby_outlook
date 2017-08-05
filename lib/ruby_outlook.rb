@@ -330,7 +330,7 @@ module RubyOutlook
         'Name' => name
       }
 
-      create_calendar_response = service.make_api_call("POST", request_url, token, nil, request_params)
+      create_calendar_response = make_api_call "POST", request_url, token, nil, request_params
       JSON.parse(create_calendar_response)
 
     end
