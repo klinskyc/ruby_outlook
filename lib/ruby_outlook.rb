@@ -327,7 +327,7 @@ module RubyOutlook
     def create_calendar(token,name)
       request_url = "/api/v2.0/me/calendars"
       request_params = {
-        'Name' => (page - 1) * view_size
+        'Name' => name
       }
 
       get_events_response = make_api_call "POST", request_url, token, request_params
