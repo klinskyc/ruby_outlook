@@ -11,9 +11,25 @@ module RubyOutlook
     attr_writer :api_host
     attr_writer :enable_fiddler
 
-    def initialize
+    BASE_URLS = {
+      graph:     "https://graph.microsoft.com",
+      office:    "https://outlook.office.com/api",
+      office365: "https://outlook.office365.com/api"
+    }
+
+    # version support:
+    # https://docs.microsoft.com/en-us/previous-versions/office/office-365-api/api/version-2.0/use-outlook-rest-api
+    API_VERSIONS = {
+      graph: %w[v1.0 beta],
+      office: %w[v2.0 v1.0 beta],
+      office365: %w[v2.0 v1.0 beta]
+    }
+
+    def initialize(api: :graph, base_url: nil, version: nil)
       @user_agent = "RubyOutlookGem/" << RubyOutlook::VERSION
-      @api_host = "https://outlook.office365.com"
+
+      @api_host = base_url || BASE_URLS[api]
+      @version = version || API_VERSIONS[api].first
       @enable_fiddler = false
     end
 
@@ -25,10 +41,9 @@ module RubyOutlook
     # params (hash) a Ruby hash containing any query parameters needed for the API call
     # payload (hash): a JSON hash representing the API call's payload. Only used
     #                 for POST or PATCH.
-    def make_api_call(method, url, token, params = nil, payload = nil)
-
+    def make_api_call(method, url, token, params = nil, payload = nil, logger = false)
       conn_params = {
-        :url => 'https://outlook.office365.com'
+        url:  @api_host
       }
 
       if @enable_fiddler
@@ -39,7 +54,7 @@ module RubyOutlook
       conn = Faraday.new(conn_params) do |faraday|
         # Uses the default Net::HTTP adapter
         faraday.adapter  Faraday.default_adapter
-
+        faraday.response :logger if logger
       end
 
       conn.headers = {
@@ -95,7 +110,7 @@ module RubyOutlook
     # sort (hash): { sort_on => field_to_sort_on, sort_order => 'ASC' | 'DESC' }
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def get_contacts(token, view_size, page, fields = nil, sort = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Contacts"
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Contacts"
       request_params = {
         '$top' => view_size,
         '$skip' => (page - 1) * view_size
@@ -119,7 +134,7 @@ module RubyOutlook
     # fields (array): An array of field names to include in results
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def get_contact_by_id(token, id, fields = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Contacts/" << id
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Contacts/" << id
       request_params = nil
 
       unless fields.nil?
@@ -137,7 +152,7 @@ module RubyOutlook
     #                     If nil, contact is created in the default contacts folder.
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def create_contact(token, payload, folder_id = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user))
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user))
 
       unless folder_id.nil?
         request_url << "/ContactFolders/" << folder_id
@@ -155,7 +170,7 @@ module RubyOutlook
     # id (string): The Id of the contact to update.
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def update_contact(token, payload, id, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Contacts/" << id
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Contacts/" << id
 
       update_contact_response = make_api_call "PATCH", request_url, token, nil, payload
 
@@ -166,7 +181,7 @@ module RubyOutlook
     # id (string): The Id of the contact to delete.
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def delete_contact(token, id, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Contacts/" << id
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Contacts/" << id
 
       delete_response = make_api_call "DELETE", request_url, token
 
@@ -186,7 +201,7 @@ module RubyOutlook
     # sort (hash): { sort_field: field_to_sort_on, sort_order: 'ASC' | 'DESC' }
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def get_messages(token, view_size, page, fields = nil, sort = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Messages"
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Messages"
       request_params = {
         '$top' => view_size,
         '$skip' => (page - 1) * view_size
@@ -213,7 +228,7 @@ module RubyOutlook
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     # folder_id (string): The folder to get mail for. (inbox, drafts, sentitems, deleteditems)
     def get_messages_for_folder(token, view_size, page, fields = nil, sort = nil, user = nil, folder_id)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/MailFolders/#{folder_id}/messages"
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/MailFolders/#{folder_id}/messages"
       request_params = {
         '$top' => view_size,
         '$skip' => (page - 1) * view_size
@@ -237,7 +252,7 @@ module RubyOutlook
     # fields (array): An array of field names to include in results
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def get_message_by_id(token, id, fields = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Messages/" << id
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Messages/" << id
       request_params = nil
 
       unless fields.nil?
@@ -255,7 +270,7 @@ module RubyOutlook
     #                     If nil, message is created in the default drafts folder.
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def create_message(token, payload, folder_id = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user))
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user))
 
       unless folder_id.nil?
         request_url << "/MailFolders/" << folder_id
@@ -273,7 +288,7 @@ module RubyOutlook
     # id (string): The Id of the message to update.
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def update_message(token, payload, id, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Messages/" << id
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Messages/" << id
 
       update_message_response = make_api_call "PATCH", request_url, token, nil, payload
 
@@ -284,7 +299,7 @@ module RubyOutlook
     # id (string): The Id of the message to delete.
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def delete_message(token, id, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Messages/" << id
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Messages/" << id
 
       delete_response = make_api_call "DELETE", request_url, token
 
@@ -297,7 +312,7 @@ module RubyOutlook
     # payload (hash): a JSON hash representing the message to send
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def send_message(token, payload, save_to_sentitems = true, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/SendMail"
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/SendMail"
 
       # Wrap message in the sendmail JSON structure
       send_mail_json = {
@@ -324,18 +339,21 @@ module RubyOutlook
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     
     def create_calendar(token,name)
-      request_url = "/api/v2.0/me/calendars"
-      request_params = {
-        'Name' => name
-      }
+      request_url = "/#{@version}/me/calendars"
+      request_params = { "Name" => name }
 
-      create_calendar_response = make_api_call "POST", request_url, token, nil, request_params
+      create_calendar_response = make_api_call("POST", request_url, token, nil, request_params)
       JSON.parse(create_calendar_response)
+    end
 
+    def get_userinfo(token)
+      request_url = "/oidc/userinfo"
+      response = make_api_call("GET", request_url, token)
+      JSON.parse(response)
     end
 
     def get_events(token, view_size, page, fields = nil, sort = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Events"
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Events"
       request_params = {
         '$top' => view_size,
         '$skip' => (page - 1) * view_size
@@ -359,7 +377,7 @@ module RubyOutlook
     # fields (array): An array of field names to include in results
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def get_event_by_id(token, id, fields = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Events/" << id
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Events/" << id
       request_params = nil
 
       unless fields.nil?
@@ -379,7 +397,7 @@ module RubyOutlook
     # fields (array): An array of field names to include in results
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def get_calendar_view(token, window_start, window_end, view_size = nil, page = nil, id = nil, fields = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user))
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user))
 
       unless id.nil?
         request_url << "/Calendars/" << id
@@ -392,21 +410,19 @@ module RubyOutlook
         'endDateTime' => window_end.strftime('%Y-%m-%dT00:00:00Z')
       }
 
-        if view_size
-         request_params['$top'] = view_size
-        end
+      if view_size
+        request_params['$top'] = view_size
+      end
 
-        if page 
-          request_params['$skip'] = (page - 1) * view_size
-        end
+      if page
+        request_params['$skip'] = (page - 1) * view_size
+      end
        
-
-
       unless fields.nil?
         request_params['$select'] = fields.join(',')
       end
 
-      get_view_response =make_api_call "GET", request_url, token, request_params
+      get_view_response = make_api_call("GET", request_url, token, request_params)
 
       JSON.parse(get_view_response)
     end
@@ -417,7 +433,7 @@ module RubyOutlook
     #                     If nil, event is created in the default calendar folder.
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def create_event(token, payload, folder_id = nil, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user))
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user))
 
       unless folder_id.nil?
         request_url << "/Calendars/" << folder_id
@@ -435,7 +451,7 @@ module RubyOutlook
     # id (string): The Id of the event to update.
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def update_event(token, payload, id, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Events/" << id
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Events/" << id
 
       update_event_response = make_api_call "PATCH", request_url, token, nil, payload
 
@@ -446,7 +462,7 @@ module RubyOutlook
     # id (string): The Id of the event to delete.
     # user (string): The user to make the call for. If nil, use the 'Me' constant.
     def delete_event(token, id, user = nil)
-      request_url = "/api/v2.0/" << (user.nil? ? "Me" : ("users/" << user)) << "/Events/" << id
+      request_url = "/#{@version}/" << (user.nil? ? "Me" : ("users/" << user)) << "/Events/" << id
 
       delete_response = make_api_call "DELETE", request_url, token
 
